@@ -2,6 +2,8 @@
 
 仓库文档按主题分类存放。
 
+自动化与 AI 接入：[CLI 使用说明](api/automation-cli.md) · [开发与验证](development/automation-cli.md)。
+
 ```
 Docs/
 ├─ architecture/       # 架构设计

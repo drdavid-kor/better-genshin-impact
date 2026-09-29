@@ -1,0 +1,52 @@
+name: BetterGI Automation CLI
+
+on:
+  pull_request:
+    paths:
+      - 'BetterGenshinImpact.Automation/**'
+      - 'BetterGenshinImpact.Cli/**'
+      - 'BetterGenshinImpact/**'
+      - 'Test/BetterGenshinImpact.Automation.Tests/**'
+      - 'Test/BetterGenshinImpact.Cli.Tests/**'
+      - 'Test/BetterGenshinImpact.UnitTest/**'
+      - 'BetterGenshinImpact.sln'
+      - '.github/workflows/automation-cli.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-validation:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build Windows solution
+        run: dotnet build BetterGenshinImpact.sln -c Debug -p:Platform=x64
+      - name: Test CLI contract
+        run: dotnet test Test/BetterGenshinImpact.Cli.Tests/BetterGenshinImpact.Cli.Tests.csproj -c Debug --no-build --logger "trx;LogFileName=cli.trx" --results-directory artifacts/test-results
+      - name: Test engine and real CLI pipe integration
+        run: dotnet test Test/BetterGenshinImpact.Automation.Tests/BetterGenshinImpact.Automation.Tests.csproj -c Debug --no-build --logger "trx;LogFileName=automation.trx" --results-directory artifacts/test-results
+      - name: Test host integration without a game
+        run: dotnet test Test/BetterGenshinImpact.UnitTest/BetterGenshinImpact.UnitTest.csproj -c Debug -p:Platform=x64 --no-build --filter "FullyQualifiedName~ServiceTests.Automation|FullyQualifiedName~InstanceIpcProtocolTests|FullyQualifiedName~RectClampTests" --logger "trx;LogFileName=host.trx" --results-directory artifacts/test-results
+      - name: Pack local CLI tool
+        run: dotnet pack BetterGenshinImpact.Cli/BetterGenshinImpact.Cli.csproj -c Release -o artifacts/cli
+      - name: Smoke test installed tool
+        shell: pwsh
+        run: |
+          $packageSource = (Resolve-Path artifacts/cli).Path
+          dotnet tool install BetterGenshinImpact.Cli --version 0.1.0 --tool-path artifacts/cli-tool --add-source $packageSource
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./artifacts/cli-tool/bettergi.exe schema
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: automation-cli-validation
+          path: |
+            artifacts/test-results/*.trx
+            artifacts/cli/*.nupkg
