@@ -16,4 +16,20 @@
     <ProjectReference Include="..\BetterGenshinImpact.Automation\BetterGenshinImpact.Automation.csproj" />
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
+  <!-- 返回运行所需文件，不调用 Build/Publish，避免 WPF 临时编译和发布查询重复构建。 -->
+  <Target Name="GetBetterGiCliBundle" DependsOnTargets="ResolveReferences" Returns="@(_BetterGiCliBundle)">
+    <ItemGroup>
+      <!-- 使用 CLI 输出中的依赖副本，防止宿主单文件发布按源路径去重时吞掉 CLI 依赖。 -->
+      <_BetterGiCliBundle Include="$(TargetPath);$(ProjectDepsFilePath);$(ProjectRuntimeConfigFilePath);@(ReferenceCopyLocalPaths->'$(TargetDir)%(DestinationSubDirectory)%(Filename)%(Extension)')" />
+      <_BetterGiCliBundle>
+        <BundleRelativePath>%(_BetterGiCliBundle.DestinationSubDirectory)%(_BetterGiCliBundle.Filename)%(_BetterGiCliBundle.Extension)</BundleRelativePath>
+      </_BetterGiCliBundle>
+      <_BetterGiCliBundle Include="$(TargetDir)$(AssemblyName).exe">
+        <!-- 只改 apphost 文件名；其内嵌的程序集名和已有 dotnet tool 包保持兼容。 -->
+        <BundleRelativePath>bettergi.exe</BundleRelativePath>
+      </_BetterGiCliBundle>
+    </ItemGroup>
+    <Error Condition="!Exists('%(_BetterGiCliBundle.Identity)')"
+      Text="BetterGI CLI 运行文件不存在：%(_BetterGiCliBundle.Identity)。请先构建主项目或 CLI 项目，再使用 --no-build 发布。" />
+  </Target>
 </Project>

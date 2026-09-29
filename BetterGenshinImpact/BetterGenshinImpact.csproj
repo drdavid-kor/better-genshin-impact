@@ -14,6 +14,9 @@
 		<ApplicationIcon>Resources\Images\logo.ico</ApplicationIcon>
 		<Platforms>x64</Platforms>
 		<DebugType>embedded</DebugType>
+		<!-- CLI 始终使用独立的 AnyCPU / framework-dependent 输出，不继承 WPF 发布配置。 -->
+		<_BetterGiCliProject>$(MSBuildProjectDirectory)\..\BetterGenshinImpact.Cli\BetterGenshinImpact.Cli.csproj</_BetterGiCliProject>
+		<_BetterGiCliRemoveProperties>TargetFramework;TargetFrameworks;RuntimeIdentifier;RuntimeIdentifiers;SelfContained;PublishSelfContained;PublishSingleFile;PublishTrimmed;PublishReadyToRun;PublishAot;UseAppHost;PublishProfile;PublishProfileFullPath;DeployOnBuild;OutputPath;OutDir;BaseOutputPath;IntermediateOutputPath;BaseIntermediateOutputPath;MSBuildProjectExtensionsPath;PublishDir;PublishUrl</_BetterGiCliRemoveProperties>
 	</PropertyGroup>
 
 <!--	<ItemGroup>
@@ -117,6 +120,47 @@
 		<ProjectReference Include="..\Fischless.HotkeyCapture\Fischless.HotkeyCapture.csproj" />
 		<ProjectReference Include="..\Fischless.WindowsInput\Fischless.WindowsInput.csproj" />
 	</ItemGroup>
+
+	<!-- 只建立构建依赖；宿主不引用 CLI 程序集，也不将其依赖混入宿主根目录。 -->
+	<ItemGroup Condition="'$(MSBuildProjectName)' == 'BetterGenshinImpact' and '$(DesignTimeBuild)' != 'true'">
+		<ProjectReference Include="$(_BetterGiCliProject)"
+			ReferenceOutputAssembly="false" Private="false"
+			AdditionalProperties="Platform=AnyCPU"
+			GlobalPropertiesToRemove="$(_BetterGiCliRemoveProperties)" />
+	</ItemGroup>
+
+	<Target Name="GetBetterGiBundledCliFiles"
+		Condition="'$(MSBuildProjectName)' == 'BetterGenshinImpact' and '$(DesignTimeBuild)' != 'true'">
+		<!-- 此查询不重建引用，正常 ProjectReference 已负责构建；禁止构建的发布操作同样只读取。 -->
+		<MSBuild Projects="$(_BetterGiCliProject)" Targets="GetBetterGiCliBundle"
+			Properties="Configuration=$(Configuration);Platform=AnyCPU;BuildProjectReferences=false"
+			RemoveProperties="$(_BetterGiCliRemoveProperties)">
+			<Output TaskParameter="TargetOutputs" ItemName="_BetterGiBundledCliFiles" />
+		</MSBuild>
+	</Target>
+
+	<Target Name="CopyBetterGiBundledCli" AfterTargets="Build" DependsOnTargets="GetBetterGiBundledCliFiles"
+		Condition="'$(MSBuildProjectName)' == 'BetterGenshinImpact' and '$(DesignTimeBuild)' != 'true'">
+		<Copy SourceFiles="@(_BetterGiBundledCliFiles)"
+			DestinationFiles="@(_BetterGiBundledCliFiles->'$(TargetDir)CLI\%(BundleRelativePath)')"
+			SkipUnchangedFiles="true" />
+		<ItemGroup>
+			<FileWrites Include="@(_BetterGiBundledCliFiles->'$(TargetDir)CLI\%(BundleRelativePath)')" />
+		</ItemGroup>
+	</Target>
+
+	<Target Name="PublishBetterGiBundledCli" AfterTargets="ComputeResolvedFilesToPublishList"
+		DependsOnTargets="GetBetterGiBundledCliFiles"
+		Condition="'$(MSBuildProjectName)' == 'BetterGenshinImpact' and '$(DesignTimeBuild)' != 'true'">
+		<ItemGroup>
+			<ResolvedFileToPublish Include="@(_BetterGiBundledCliFiles)">
+				<RelativePath>CLI\%(_BetterGiBundledCliFiles.BundleRelativePath)</RelativePath>
+				<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+				<!-- FolderProfile 将宿主发布为单文件，CLI 必须仍是可直接调用的独立目录。 -->
+				<ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+			</ResolvedFileToPublish>
+		</ItemGroup>
+	</Target>
 
 	<ItemGroup>
 		<None Update="GameTask\**\Recognition.json">

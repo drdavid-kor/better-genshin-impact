@@ -5,13 +5,14 @@ description: Discover and run installed BetterGI scripts, configuration groups, 
 
 # BetterGI tasks
 
-Use the installed `bettergi` CLI to operate the user's existing BetterGI tasks. This skill is self-contained and can be copied into another agent's skill directory. The CLI and a matching BetterGI build are separate prerequisites.
+Use the `bettergi` CLI to operate the user's existing BetterGI tasks. Matching BetterGI builds include the client at `<install>/CLI/bettergi.exe`; no .NET tool installation is needed to use that copy. This skill is self-contained and can be copied into another agent's skill directory.
 
 ## Connect and discover
 
 - Use the user's intended installation directory, containing `BetterGI.exe`, with `--install <directory>` or the `BGI_INSTALL_DIR` environment variable. Do not guess between multiple installations. `--session <id>` selects a Windows session; omit it for the current session.
+- Prefer the bundled client's absolute path. Examples using `bettergi` assume it is already in PATH; otherwise invoke `& '<install>/CLI/bettergi.exe'` in PowerShell. When the user supplies the GUI's copied AI prompt, retain its exact CLI path, installation path, and Windows session for every host command. `schema` is offline and takes no global options.
 - Run `bettergi doctor --install <directory>` and `bettergi schema` to inspect connectivity and the installed contract. Commands write a single camelCase JSON value to stdout. Parse JSON even when the process exits nonzero.
-- The host must have been launched with `BetterGI.exe --enable-cli`. It still requires its usual administrator privileges. The CLI never starts or elevates the host. An already-running host must exit and restart to enable the bridge; older binaries do not gain support just by adding the flag. Do not interrupt an active task to restart the host without authorization.
+- Enable the bridge in a running BetterGI through its `AI / CLI` page's start-service button, or launch it with `BetterGI.exe --enable-cli`. The GUI enables the current process immediately without restarting; this setting does not persist to the next launch. The host still requires its usual administrator privileges, and the CLI never starts or elevates it. Older binaries need a matching upgrade; adding the flag alone does not add the bridge.
 - Before submitting a new run, inspect doctor's `data.ready`, `data.busy`, and `data.reason`. Readiness requires a running BetterGI WPF window, the capture service already enabled by the user in BetterGI's start page, initialized task context, and a still-valid game window. The CLI does not start the game/capture service or open startup dialogs. If not ready, explain the manual preparation indicated by `reason`; do not keep submitting. Existing runs can still be queried, waited on, or cancelled when execution readiness is false.
 - Run `bettergi tasks list [--kind script|group|one-dragon] --install <directory>`, then `bettergi tasks show <kind> <exactName> --install <directory>` for the chosen task. The responses contain `data.tasks` and `data.task` respectively. Check `canRun` and `unavailableReason`. Use the exact discovered `name` and `kind`; a script's name is its directory name, which can differ from `details.displayName`. Do not substitute a similarly named task when lookup fails.
 - Scripts, configuration groups, and one-dragon routines execute using the user's local BetterGI configuration. Discovery does not establish that a task is appropriate for the user's requested objective. Inspect its details and resolve material ambiguity before submitting.
@@ -23,10 +24,11 @@ For each newly authorized execution, generate one GUID and preserve it with the 
 
 ```powershell
 $install = 'C:\Games\BetterGI'
+$cli = Join-Path $install 'CLI\bettergi.exe'
 $runId = [Guid]::NewGuid().ToString()
-bettergi run script 'Exact installed script name' --request-id $runId --install $install
-bettergi runs get $runId --install $install
-bettergi runs wait $runId --timeout 300 --install $install
+& $cli run script 'Exact installed script name' --request-id $runId --install $install
+& $cli runs get $runId --install $install
+& $cli runs wait $runId --timeout 300 --install $install
 ```
 
 - Follow the user's existing authorization; the skill does not require repeated confirmation of an already authorized task. It does not authorize installing scripts, editing configuration, switching accounts, or executing additional tasks beyond that request.

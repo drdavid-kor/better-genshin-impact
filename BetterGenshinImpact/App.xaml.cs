@@ -131,7 +131,9 @@ public partial class App : Application
                 services.AddHostedService(sp => sp.GetRequiredService<InstanceService>());
                 // App Host
                 services.AddHostedService<ApplicationHostService>();
-                services.AddHostedService<AutomationHostedService>();
+                services.AddSingleton<AutomationHostedService>();
+                services.AddSingleton<IAutomationBridgeService>(sp => sp.GetRequiredService<AutomationHostedService>());
+                services.AddHostedService(sp => sp.GetRequiredService<AutomationHostedService>());
                 // Page resolver service
                 services.AddSingleton<INavigationService, NavigationService>();
                 services.AddSingleton<IUpdateService, UpdateService>();
@@ -149,6 +151,7 @@ public partial class App : Application
 
                 // Views
                 services.AddView<HomePage, HomePageViewModel>();
+                services.AddView<AutomationPage, AutomationPageViewModel>();
                 services.AddView<ScriptControlPage, ScriptControlViewModel>();
                 services.AddView<TriggerSettingsPage, TriggerSettingsPageViewModel>();
                 services.AddView<MacroSettingsPage, MacroSettingsPageViewModel>();

@@ -4,13 +4,17 @@
 
 ## 启用宿主
 
-使用现有管理员终端或启动器运行：
+在已运行的 BetterGI 中打开 **AI / CLI** 页面，点击 **启动 CLI 服务**，即可为当前进程即时启用接口，无需退出重启。此开关不保存到下次启动；下次仍需从页面启用，或在启动参数中加入 `--enable-cli`。
+
+页面还提供 **打开 CLI 终端** 和 **复制 AI 提示词**。打开终端会启用服务并运行连接诊断，不执行游戏任务。复制的提示词包含当前 CLI 绝对路径、BetterGI 安装目录和 Windows Session，可直接交给支持本机 Windows 命令的 AI 使用，无需另行安装 skill。可填写任务目标；留空时提示词只让 AI 先发现可用任务。复制本身不启用服务或提交任务。客户端随程序放在 `<安装目录>/CLI/bettergi.exe`，无需先安装全局 .NET tool 或修改 PATH。
+
+也可以使用现有管理员终端或启动器运行：
 
 ```powershell
 & 'C:\Games\BetterGI\BetterGI.exe' --enable-cli
 ```
 
-自动化接口默认关闭。已运行的主实例需要先结束当前工作、退出，再带此参数启动；再次启动一个带参数的进程不会改造原实例。CLI 自身不会启动主程序或请求提权。
+自动化接口默认关闭。主程序已经运行时，直接从 **AI / CLI** 页面启用即可；再次启动一个带参数的进程不会改造原实例。CLI 自身不会启动主程序或请求提权。
 
 执行新任务前，还需要 BetterGI 的 WPF 窗口正常运行、用户已在启动页启用截图器、`TaskContext` 初始化完成，并且所连接的原神窗口仍有效。CLI 不会自动启动游戏、启用截图器或弹出启动确认框；未满足条件时返回 `not_ready`。按照 `doctor` 的 `data.reason` 手动准备后重新诊断：未启用截图器时先在界面启用，初始化中则等待，原游戏窗口失效时重新连接游戏并启用截图器。任务发现和既有运行的查询、等待、取消仍可使用。
 
@@ -78,15 +82,19 @@ bettergi runs cancel <GUID>
 
 ```powershell
 $install = 'C:\Games\BetterGI'
-bettergi doctor --install $install
-bettergi tasks list --kind script --install $install
-bettergi tasks show script '列表中返回的精确名称' --install $install
+$cli = Join-Path $install 'CLI\bettergi.exe'
+& $cli schema
+& $cli doctor --install $install
+& $cli tasks list --kind script --install $install
+& $cli tasks show script '列表中返回的精确名称' --install $install
 
 $runId = [Guid]::NewGuid().ToString()
-bettergi run script '列表中返回的精确名称' --request-id $runId --install $install
-bettergi runs get $runId --install $install
-bettergi runs wait $runId --timeout 300 --install $install
+& $cli run script '列表中返回的精确名称' --request-id $runId --install $install
+& $cli runs get $runId --install $install
+& $cli runs wait $runId --timeout 300 --install $install
 ```
+
+以上命令默认当前 Windows Session。从页面复制的提示词指定了 Session 时，对 `doctor`、任务和运行命令保留其中的 `--session <id>`；离线 `schema` 不接受该选项。
 
 每一次新的执行生成一个 GUID，执行记录的 `data.requestId` 与 `data.runId` 相同。调用方应在提交前保存该值，以及安装目录、Session、kind、名称与参数。重复提交同一 GUID、同一任务和参数不会重复执行；同一 GUID 配合不同任务或参数会报冲突。
 
@@ -95,8 +103,8 @@ bettergi runs wait $runId --timeout 300 --install $install
 `run --wait` 将提交与等待合并。长任务也可以先提交，再分多次 `runs wait`；某一次等待结束或超时不会改变宿主任务状态。
 
 ```powershell
-bettergi runs cancel $runId --install $install
-bettergi runs wait $runId --timeout 300 --install $install
+& $cli runs cancel $runId --install $install
+& $cli runs wait $runId --timeout 300 --install $install
 ```
 
 取消是协作式请求。收到 `cancelRequested` 后继续查询或等待，直到终态；不能将“已收到取消请求”报告为“已经停止”。取消只能针对该 run，不应为了启动 CLI 任务去取消无关的界面任务。

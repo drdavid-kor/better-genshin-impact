@@ -188,6 +188,13 @@
                 </ui:NavigationViewItem>
             </ui:NavigationView.MenuItems>
             <ui:NavigationView.FooterMenuItems>
+                <ui:NavigationViewItem Content="AI / CLI"
+                                       NavigationCacheMode="Enabled"
+                                       TargetPageType="{x:Type pages:AutomationPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="WindowConsole20" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
                 <ui:NavigationViewItem Content="{i18n:T 设置}"
                                        NavigationCacheMode="Enabled"
                                        TargetPageType="{x:Type pages:CommonSettingsPage}">

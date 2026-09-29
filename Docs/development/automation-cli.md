@@ -9,11 +9,13 @@
 | `BetterGenshinImpact.Automation` | 协议、任务与运行记录、状态管理和本地传输 |
 | `BetterGenshinImpact.Cli` | `bettergi` .NET tool、参数解析、JSON 输出和退出码 |
 | `BetterGenshinImpact` 中的自动化适配层 | 接入既有执行流程、UI 线程、取消和日志观测 |
+| `BetterGenshinImpact/View/Pages/AutomationPage.xaml`、`BetterGenshinImpact/ViewModel/Pages/AutomationPageViewModel.cs` | AI / CLI 页面、服务状态、终端和提示词操作 |
+| `BetterGenshinImpact/Service/Automation/AutomationCliPromptBuilder.cs` | 使用当前安装路径和 Session 生成提示词与终端脚本 |
 | `Test/BetterGenshinImpact.Cli.Tests` | CLI 参数及行为测试 |
 | `Test/BetterGenshinImpact.Automation.Tests` | 状态、持久化和协议测试 |
 | `.agents/skills/bettergi-*` | 面向 AI 的运行与配置操作说明 |
 
-具体用户命令见 [API 文档](../api/automation-cli.md)。默认不启用宿主接口；仅 `--enable-cli` 开启。CLI 不承担主程序启动、提权或桌面分身创建。
+具体用户命令见 [API 文档](../api/automation-cli.md)。默认不启用宿主接口；可由 **AI / CLI** 页面为当前进程即时启用，或通过启动参数 `--enable-cli` 开启。页面开关不持久保存到下一次启动。CLI 不承担主程序启动、提权或桌面分身创建。
 
 ## 构建、打包与安装
 
@@ -21,18 +23,20 @@
 
 ```powershell
 dotnet build BetterGenshinImpact.sln -c Debug -p:Platform=x64
-dotnet pack BetterGenshinImpact.Cli/BetterGenshinImpact.Cli.csproj -c Release -o ./artifacts/cli
 ```
 
-将生成的 `BetterGenshinImpact.Cli` 工具包安装到明确的本地目录。以下使用初始包版本 `0.1.0`；后续版本以实际生成的包为准，避免从公共源安装同名包。对已有安装使用 `dotnet tool update`，不要删除工具目录来替代更新。
+主程序的构建和发布输出随附 `CLI/bettergi.exe` 及其运行文件；仅构建主工程也会构建并复制 CLI，无需安装工具包。发布为单文件宿主时，CLI 仍以独立目录保留。可使用 `.github/scripts/verify-bundled-cli.ps1 -HostDirectory <主程序输出目录>` 检查客户端文件并运行离线 `schema`，不启动游戏。
+
+需要单独部署 .NET tool 时，再打包并安装 `BetterGenshinImpact.Cli` 到明确的本地目录。以下使用初始包版本 `0.1.0`；后续版本以实际生成的包为准，避免从公共源安装同名包。对已有安装使用 `dotnet tool update`，不要删除工具目录来替代更新。
 
 ```powershell
+dotnet pack BetterGenshinImpact.Cli/BetterGenshinImpact.Cli.csproj -c Release -o ./artifacts/cli
 $packageSource = (Resolve-Path './artifacts/cli').Path
 dotnet tool install BetterGenshinImpact.Cli --version 0.1.0 --tool-path ./artifacts/cli-tool --add-source $packageSource
 & './artifacts/cli-tool/bettergi.exe' schema
 ```
 
-将 `--install` 指向主程序构建输出中包含 `BetterGI.exe` 的目录，而不是源码根目录或 CLI 工具目录。先在管理员终端启动该输出目录内的 `BetterGI.exe --enable-cli`，再用 CLI 的 `doctor` 与 `tasks list` 验证连接。普通用户命令行可以在同用户、同 Session 下连接管理员宿主，且无需开放网络端口。
+将 `--install` 指向主程序构建输出中包含 `BetterGI.exe` 的目录，而不是源码根目录或 CLI 工具目录。在主程序的 **AI / CLI** 页面点击 **启动 CLI 服务**，或在管理员终端启动 `BetterGI.exe --enable-cli`，再用 CLI 的 `doctor` 与 `tasks list` 验证连接。**打开 CLI 终端** 会启用服务并运行 `doctor`；**复制 AI 提示词** 只复制当前路径、安装目录、Session、可选目标和调用规则，不启用服务。这些操作都不提交游戏任务。普通用户命令行可以在同用户、同 Session 下连接管理员宿主，且无需开放网络端口。
 
 执行就绪还要求 WPF 窗口运行、用户已在界面启动页启用截图器、`TaskContext` 初始化完成以及游戏窗口句柄仍有效。`doctor` 返回可直接指导用户手动准备的 `reason`。CLI 路径中的 `StartGameTask` 只验证这些条件，不自动启动游戏/截图器或弹出启动确认框；就绪条件在真正执行前会再次检查。连接成功、任务可发现和可以接受新任务是不同层面的状态。
 
