@@ -18,6 +18,7 @@ public class CommandLineOptions
     public static CommandLineOptions Instance => _instance ??= Parse(Environment.GetCommandLineArgs());
 
     public CommandLineAction Action { get; }
+    public bool EnableCli { get; }
 
     /// <summary>
     /// 当前 BetterGI 的实例类型。
@@ -63,7 +64,8 @@ public class CommandLineOptions
         string[]? groupNames = null,
         BetterGiInstanceType instanceType = BetterGiInstanceType.Primary,
         bool hasExplicitInstanceType = false,
-        int? restartFromProcessId = null)
+        int? restartFromProcessId = null,
+        bool enableCli = false)
     {
         Action = action;
         OneDragonConfigName = oneDragonConfigName;
@@ -71,6 +73,7 @@ public class CommandLineOptions
         InstanceType = instanceType;
         HasExplicitInstanceType = hasExplicitInstanceType;
         RestartFromProcessId = restartFromProcessId;
+        EnableCli = enableCli;
     }
 
     internal static CommandLineOptions Parse(string[] args)
@@ -79,11 +82,17 @@ public class CommandLineOptions
         var instanceType = BetterGiInstanceType.Primary;
         var hasExplicitInstanceType = false;
         int? restartFromProcessId = null;
+        var enableCli = false;
         var commandArgs = new List<string>();
 
         for (var index = 0; index < launchArgs.Length; index++)
         {
             var argument = launchArgs[index];
+            if (argument.Equals("--enable-cli", StringComparison.OrdinalIgnoreCase))
+            {
+                enableCli = true;
+                continue;
+            }
             if (argument.Equals(InstanceArgument, StringComparison.OrdinalIgnoreCase))
             {
                 if (TryReadNext(launchArgs, ref index, out var instanceTypeValue))
@@ -164,7 +173,8 @@ public class CommandLineOptions
                 groupNames,
                 instanceType,
                 hasExplicitInstanceType,
-                restartFromProcessId);
+                restartFromProcessId,
+                enableCli);
         }
     }
 

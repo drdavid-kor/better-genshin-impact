@@ -113,6 +113,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Fischless.GameCapture\Fischless.GameCapture.csproj" />
+		<ProjectReference Include="..\BetterGenshinImpact.Automation\BetterGenshinImpact.Automation.csproj" />
 		<ProjectReference Include="..\Fischless.HotkeyCapture\Fischless.HotkeyCapture.csproj" />
 		<ProjectReference Include="..\Fischless.WindowsInput\Fischless.WindowsInput.csproj" />
 	</ItemGroup>

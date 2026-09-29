@@ -1968,6 +1968,7 @@ public partial class ScriptControlViewModel : ViewModel
     [RelayCommand]
     public async Task OnStartScriptGroupAsync()
     {
+        using var preparation = CancellationContext.Instance.ReservePreparation();
         if (SelectedScriptGroup == null)
         {
             _snackbarService.Show(
@@ -2423,6 +2424,8 @@ public partial class ScriptControlViewModel : ViewModel
 
     public async Task StartGroups(List<ScriptGroup> scriptGroups, TaskProgress? taskProgress = null, bool loop = false)
     {
+        // 在 try/finally 之外拒绝未获执行权的入口，不能清理另一个 CLI 作业的上下文。
+        using var preparation = CancellationContext.Instance.ReservePreparation();
         _logger.LogInformation("开始连续执行选中配置组:{Names}", string.Join(",", scriptGroups.Select(x => x.Name)));
         try
         {

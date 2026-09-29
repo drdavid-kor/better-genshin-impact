@@ -15,6 +15,7 @@ using BetterGenshinImpact.Service;
 using BetterGenshinImpact.Service.Notification;
 using BetterGenshinImpact.Service.Notification.Model.Enum;
 using BetterGenshinImpact.ViewModel;
+using BetterGenshinImpact.Service.Automation;
 
 namespace BetterGenshinImpact.GameTask;
 
@@ -48,7 +49,10 @@ public class TaskRunner
     public async Task RunCurrentAsync(Func<Task> action, bool resetCancellationContext = true, bool clearCancellationContextOnLockFailure = false)
     {
         // 加锁
-        var hasLock = await TaskSemaphore.WaitAsync(0);
+        var automationScope = AutomationExecutionScope.Current;
+        var hasLock = automationScope is not null
+            ? automationScope.TryEnterRunner()
+            : await TaskSemaphore.WaitAsync(0);
         if (!hasLock)
         {
             _logger.LogError("任务启动失败：当前存在正在运行中的独立任务，请不要重复执行任务！");
@@ -74,6 +78,7 @@ public class TaskRunner
         }
         catch (NormalEndException e)
         {
+            automationScope?.RecordException(e);
             Notify.Event(NotificationEvent.TaskCancel).Success("任务手动取消，或正常结束");
             _logger.LogInformation("任务中断:{Msg}", e.Message);
             if (RunnerContext.Instance.IsContinuousRunGroup)
@@ -82,8 +87,9 @@ public class TaskRunner
                 throw;
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException e)
         {
+            automationScope?.RecordException(e);
             Notify.Event(NotificationEvent.TaskCancel).Success("任务被手动取消");
             _logger.LogInformation("任务中断:{Msg}", "任务被取消");
             if (RunnerContext.Instance.IsContinuousRunGroup)
@@ -94,22 +100,31 @@ public class TaskRunner
         }
         catch (Exception e)
         {
+            automationScope?.RecordException(e);
             Notify.Event(NotificationEvent.TaskError).Error("任务执行异常", e);
             _logger.LogError(e.Message);
             _logger.LogDebug(e.StackTrace);
         }
         finally
         {
-            End();
-            _logger.LogInformation("→ {Text}", _name + "任务结束");
-
-            CancellationContext.Instance.Clear();
-            RunnerContext.Instance.Clear();
-
-            // 释放锁
-            if (hasLock)
+            try
             {
-                TaskSemaphore.Release();
+                End();
+                _logger.LogInformation("→ {Text}", _name + "任务结束");
+            }
+            finally
+            {
+                CancellationContext.Instance.Clear();
+                RunnerContext.Instance.Clear();
+                // CLI 的锁由最外层作业在全部任务和清理结束后释放。
+                if (hasLock && automationScope is null)
+                {
+                    TaskSemaphore.Release();
+                }
+                else if (hasLock)
+                {
+                    automationScope?.ExitRunner();
+                }
             }
         }
     }
@@ -126,6 +141,7 @@ public class TaskRunner
 
     public async Task RunSoloTaskAsync(ISoloTask soloTask)
     {
+        using var preparation = CancellationContext.Instance.ReservePreparation();
         // 启动等待之前先进行取消操作的初始化，便于在任务开始前终止任务.
         CancellationContext.Instance.Set();
 

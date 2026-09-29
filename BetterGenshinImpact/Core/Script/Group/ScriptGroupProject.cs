@@ -249,6 +249,8 @@ public partial class ScriptGroupProject : ObservableObject
             OtherConfig.AutoRestart autoRestart = TaskContext.Instance().Config.OtherConfig.AutoRestartConfig;
             if (!pathingTask.SuccessEnd)
             {
+                BetterGenshinImpact.Service.Automation.AutomationExecutionScope.Current?
+                    .RecordFailure($"路径追踪任务未正常走完：{Name}");
                 TaskControl.Logger.LogWarning($"此追踪脚本未正常走完！");
                 if (autoRestart.Enabled && autoRestart.IsPathingFailureExceptional && !pathingTask.SuccessEnd)
                 {
