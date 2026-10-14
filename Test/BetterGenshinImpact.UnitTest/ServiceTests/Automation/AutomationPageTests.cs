@@ -134,16 +134,25 @@ public class AutomationPageTests
             "[Console]::Write([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($value)))";
         var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
             "WindowsPowerShell", "v1.0", "powershell.exe"))
-        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add("-NoLogo");
         start.ArgumentList.Add("-NoProfile");
+        start.ArgumentList.Add("-NonInteractive");
         start.ArgumentList.Add("-EncodedCommand");
         start.ArgumentList.Add(AutomationCliPromptBuilder.EncodeTerminalScript(parser));
         using var process = Process.Start(start)!;
+        process.StandardInput.Close();
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        // Windows PowerShell 的冷启动和运行器负载也计入子进程退出期限。
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         try { await process.WaitForExitAsync(timeout.Token); }
-        catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            throw new TimeoutException($"PowerShell 路径 AST 解析未在 30 秒内退出。stdout: {await output}; stderr: {await errors}");
+        }
         Assert.Equal(0, process.ExitCode);
         Assert.Equal(string.Empty, await errors);
         Assert.Equal(path, Encoding.Unicode.GetString(Convert.FromBase64String(await output)));
