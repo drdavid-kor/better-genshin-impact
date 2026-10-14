@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using BetterGenshinImpact.Automation;
@@ -9,6 +10,7 @@ using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service.Automation;
 using BetterGenshinImpact.ViewModel.Pages;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace BetterGenshinImpact.UnitTest.ServiceTests.Automation;
 
@@ -132,6 +134,161 @@ public class AutomationDragonConfigStoreTests
         fixture.Config.AutoBossCompletedRunCount++;
         Assert.Equal(1, fixture.Read().AutoBossCompletedRunCount);
         Assert.Null(typeof(OneDragonFlowViewModel).GetField("_automationConfigStore", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(viewModel));
+    }
+
+    [Fact]
+    public async Task GuiAndCliSaves_PreserveUserEditsAndRefreshLoadedRewardCount()
+    {
+        using var fixture = new ConfigFixture();
+        var gui = fixture.Read();
+        TrackAutosavingGui(gui, fixture.Path);
+        using (var store = new AutomationDragonConfigStore(fixture.Config, fixture.Path))
+        {
+            gui.AutoBossName = "GUI 修改的首领";
+            await Task.Run(() => fixture.Config.AutoBossCompletedRunCount++);
+            Assert.Equal("GUI 修改的首领", fixture.Read().AutoBossName);
+            Assert.Equal(2, gui.AutoBossCompletedRunCount);
+            gui.PartyName = "GUI 新队伍";
+            Assert.Equal(2, fixture.Read().AutoBossCompletedRunCount);
+            await Task.Run(() => fixture.Config.AutoBossCompletedRunCount++);
+        }
+        gui.AutoBossTimeout = 300; // CLI 完成后，GUI 的旧对象也不能把次数覆盖回去。
+        var saved = fixture.Read();
+        Assert.Equal(3, saved.AutoBossCompletedRunCount);
+        Assert.Equal("GUI 修改的首领", saved.AutoBossName);
+        Assert.Equal("GUI 新队伍", saved.PartyName);
+        Assert.Equal(300, saved.AutoBossTimeout);
+    }
+
+    [Fact]
+    public async Task DelayedGuiRefresh_StillPreservesCountsAndReadsLatestValue()
+    {
+        using var fixture = new ConfigFixture();
+        var gui = fixture.Read();
+        var queue = new ConcurrentQueue<Action>();
+        TrackAutosavingGui(gui, fixture.Path, queue.Enqueue);
+        using var store = new AutomationDragonConfigStore(fixture.Config, fixture.Path);
+        await Task.Run(() => fixture.Config.AutoBossCompletedRunCount++).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, gui.AutoBossCompletedRunCount); // UI 通知尚未执行。
+
+        gui.PartyName = "通知到达之前修改队伍";
+        Assert.Equal(2, fixture.Read().AutoBossCompletedRunCount);
+        await Task.Run(() => fixture.Config.AutoBossCompletedRunCount++).WaitAsync(TimeSpan.FromSeconds(5));
+        while (queue.TryDequeue(out var refresh)) refresh();
+
+        Assert.Equal(3, gui.AutoBossCompletedRunCount);
+        Assert.Equal(3, fixture.Read().AutoBossCompletedRunCount);
+        Assert.Equal("通知到达之前修改队伍", fixture.Read().PartyName);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExplicitGuiCountReset_IsPreservedInsteadOfBeingClampedToOldSnapshot(bool cliStillRunning)
+    {
+        using var fixture = new ConfigFixture();
+        var gui = fixture.Read();
+        TrackAutosavingGui(gui, fixture.Path);
+        using var store = new AutomationDragonConfigStore(fixture.Config, fixture.Path);
+        fixture.Config.AutoBossCompletedRunCount++;
+        if (!cliStillRunning) store.Dispose();
+
+        gui.AutoBossCompletedRunCount = 0;
+        Assert.Equal(0, fixture.Read().AutoBossCompletedRunCount);
+        if (cliStillRunning)
+        {
+            fixture.Config.AutoBossCompletedRunCount++;
+            Assert.Equal(1, fixture.Read().AutoBossCompletedRunCount);
+            Assert.Equal(1, gui.AutoBossCompletedRunCount);
+            Assert.Equal(1, fixture.Config.AutoBossCompletedRunCount);
+        }
+    }
+
+    [Fact]
+    public void MultipleLoadedGuiSnapshots_OnlyMergeChangedFields()
+    {
+        using var fixture = new ConfigFixture();
+        var first = fixture.Read();
+        var second = fixture.Read();
+        TrackAutosavingGui(first, fixture.Path);
+        TrackAutosavingGui(second, fixture.Path);
+        first.PartyName = "第一个窗口改的队伍";
+        second.AutoBossName = "第二个窗口改的首领";
+        using var store = new AutomationDragonConfigStore(fixture.Config, fixture.Path);
+        fixture.Config.AutoBossCompletedRunCount++;
+
+        var saved = fixture.Read();
+        Assert.Equal("第一个窗口改的队伍", saved.PartyName);
+        Assert.Equal("第二个窗口改的首领", saved.AutoBossName);
+        Assert.Equal(2, saved.AutoBossCompletedRunCount);
+        Assert.Equal(2, first.AutoBossCompletedRunCount);
+        Assert.Equal(2, second.AutoBossCompletedRunCount);
+    }
+
+    [Fact]
+    public void CliCountMerge_PreservesUnknownFieldsAndCaseInsensitiveCount()
+    {
+        using var fixture = new ConfigFixture();
+        var json = JObject.Parse(File.ReadAllText(fixture.Path));
+        json.Property(nameof(OneDragonFlowConfig.AutoBossCompletedRunCount))!.Remove();
+        json["autoBossCompletedRunCount"] = 1;
+        const string timestamp = "2026-10-14T08:09:10.1234000+08:00";
+        json["userExtension"] = new JObject { ["timestamp"] = timestamp };
+        File.WriteAllText(fixture.Path, json.ToString());
+        using var store = new AutomationDragonConfigStore(fixture.Config, fixture.Path);
+
+        fixture.Config.AutoBossCompletedRunCount++;
+
+        var saved = AutomationJson.Deserialize<JObject>(File.ReadAllText(fixture.Path));
+        Assert.Equal(2, saved.Value<int>("autoBossCompletedRunCount"));
+        Assert.Null(saved[nameof(OneDragonFlowConfig.AutoBossCompletedRunCount)]);
+        Assert.Equal(timestamp, saved["userExtension"]!.Value<string>("timestamp"));
+    }
+
+    [Fact]
+    public void GuiNextTaskEdit_IsNotClearedByCliSnapshot()
+    {
+        using var fixture = new ConfigFixture();
+        fixture.Config.NextTaskId = "旧的标记";
+        File.WriteAllText(fixture.Path, JsonConvert.SerializeObject(fixture.Config));
+        var gui = fixture.Read();
+        TrackAutosavingGui(gui, fixture.Path);
+        using var store = new AutomationDragonConfigStore(fixture.Config, fixture.Path);
+        gui.NextTaskId = "GUI 刚设置的新标记";
+
+        fixture.Config.NextTaskId = "";
+        store.Save();
+
+        Assert.Equal("GUI 刚设置的新标记", fixture.Read().NextTaskId);
+    }
+
+    [Fact]
+    public async Task ConcurrentCountWriters_MergeEveryIncrement()
+    {
+        using var fixture = new ConfigFixture();
+        var second = fixture.Read();
+        using var firstStore = new AutomationDragonConfigStore(fixture.Config, fixture.Path);
+        using var secondStore = new AutomationDragonConfigStore(second, fixture.Path);
+
+        await Task.WhenAll(Task.Run(() =>
+        {
+            for (var i = 0; i < 10; i++) fixture.Config.AutoBossCompletedRunCount++;
+        }), Task.Run(() =>
+        {
+            for (var i = 0; i < 10; i++) second.AutoBossCompletedRunCount++;
+        })).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(21, fixture.Read().AutoBossCompletedRunCount);
+        Assert.Empty(Directory.EnumerateFiles(fixture.Directory, "*.tmp"));
+    }
+
+    private static void TrackAutosavingGui(OneDragonFlowConfig config, string path, Action<Action>? dispatch = null)
+    {
+        OneDragonConfigFile.TrackGui(config, path, dispatch);
+        config.PropertyChanged += (_, _) =>
+        {
+            if (!OneDragonConfigFile.IsRefreshing(config)) OneDragonConfigFile.SaveGui(config, path);
+        };
     }
 
     private static OneDragonFlowViewModel UninitializedViewModel() =>

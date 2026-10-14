@@ -305,6 +305,7 @@ public partial class OneDragonFlowViewModel : ViewModel
             var config = JsonConvert.DeserializeObject<OneDragonFlowConfig>(json);
             if (config != null)
             {
+                OneDragonConfigFile.TrackGui(config, configFile);
                 configs.Add(config);
                 if (config.Name == TaskContext.Instance().Config.SelectedOneDragonFlowConfigName)
                 {
@@ -493,6 +494,7 @@ public partial class OneDragonFlowViewModel : ViewModel
         {
             return;
         }
+        if (OneDragonConfigFile.IsRefreshing(config)) return;
 
         // 首领讨伐的累计次数回调来自任务线程，保存配置需要访问 WPF 任务列表，统一调度回 UI 线程。
         if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
@@ -527,9 +529,8 @@ public partial class OneDragonFlowViewModel : ViewModel
         try
         {
             Directory.CreateDirectory(OneDragonFlowConfigFolder);
-            var json = JsonConvert.SerializeObject(config, Formatting.Indented);
             var filePath = Path.Combine(OneDragonFlowConfigFolder, $"{config.Name}.json");
-            File.WriteAllText(filePath, json);
+            OneDragonConfigFile.SaveGui(config, filePath);
         }
         catch (Exception e)
         {
@@ -932,6 +933,9 @@ public partial class OneDragonFlowViewModel : ViewModel
     [RelayCommand]
     private async Task DeleteConfig()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (SelectedConfig == null)
         {
             Toast.Warning("请先选择要删除的配置");
@@ -1003,6 +1007,9 @@ public partial class OneDragonFlowViewModel : ViewModel
     [RelayCommand]
     private void RenameConfig()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (SelectedConfig == null)
         {
             Toast.Warning("请先选择要重命名的配置");

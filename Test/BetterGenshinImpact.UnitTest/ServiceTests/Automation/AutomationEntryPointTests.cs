@@ -8,6 +8,7 @@ using BetterGenshinImpact.Service.Automation;
 using BetterGenshinImpact.Service;
 using BetterGenshinImpact.ViewModel.Pages;
 using CommunityToolkit.Mvvm.Input;
+using System.Windows.Input;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BetterGenshinImpact.UnitTest.ServiceTests.Automation;
@@ -136,6 +137,24 @@ public class AutomationEntryPointTests
         using var scope = new AutomationExecutionScope(CancellationContext.Instance, CancellationToken.None, _ => { });
 
         await viewModel.OnOneKeyExecute();
+
+        Assert.Null(viewModel.SelectedConfig);
+        Assert.Same(scope.CancellationSource, CancellationContext.Instance.Cts);
+        Assert.False(scope.IsCancellationRequested);
+        Assert.Empty(scope.Failures);
+    }
+
+    [Theory]
+    [InlineData("DeleteConfigCommand")]
+    [InlineData("RenameConfigCommand")]
+    public async Task DragonFileCommand_DuringCliRun_ReturnsBeforeDialogOrFileChanges(string commandProperty)
+    {
+        var viewModel = (OneDragonFlowViewModel)RuntimeHelpers.GetUninitializedObject(typeof(OneDragonFlowViewModel));
+        using var scope = new AutomationExecutionScope(CancellationContext.Instance, CancellationToken.None, _ => { });
+        var command = Assert.IsAssignableFrom<ICommand>(typeof(OneDragonFlowViewModel).GetProperty(commandProperty)!.GetValue(viewModel));
+
+        if (command is IAsyncRelayCommand asyncCommand) await asyncCommand.ExecuteAsync(null);
+        else command.Execute(null);
 
         Assert.Null(viewModel.SelectedConfig);
         Assert.Same(scope.CancellationSource, CancellationContext.Instance.Cts);

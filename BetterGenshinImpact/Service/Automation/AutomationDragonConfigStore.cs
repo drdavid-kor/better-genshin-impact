@@ -1,7 +1,6 @@
 using System;
 using System.ComponentModel;
 using System.IO;
-using System.Text;
 using BetterGenshinImpact.Automation;
 using BetterGenshinImpact.Core.Config;
 using Newtonsoft.Json;
@@ -16,18 +15,23 @@ internal sealed class AutomationDragonConfigStore : IDisposable
     private readonly string _path;
     private AutomationException? _failure;
     private bool _disposed;
+    private bool _refreshing;
+    private int _savedCount;
+    private string _savedNextTaskId;
 
     internal AutomationDragonConfigStore(OneDragonFlowConfig config, string path)
     {
         _config = config;
         _path = Path.GetFullPath(path);
         if (!File.Exists(_path)) throw new FileNotFoundException("一条龙配置文件已不存在。", _path);
+        _savedCount = config.AutoBossCompletedRunCount;
+        _savedNextTaskId = config.NextTaskId;
         _config.PropertyChanged += ConfigPropertyChanged;
     }
 
     private void ConfigPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(OneDragonFlowConfig.AutoBossCompletedRunCount)) Save();
+        if (!_refreshing && e.PropertyName == nameof(OneDragonFlowConfig.AutoBossCompletedRunCount)) Save();
     }
 
     internal void Save()
@@ -37,27 +41,25 @@ internal sealed class AutomationDragonConfigStore : IDisposable
             // Dispose 已解除订阅；并发到达的旧事件也不再保存。
             if (_disposed) return;
             ThrowIfFailed();
-            var temporary = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
-                var bytes = new UTF8Encoding(false).GetBytes(JsonConvert.SerializeObject(_config, Formatting.Indented));
-                using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                var nextTaskId = _config.NextTaskId != _savedNextTaskId ? _config.NextTaskId : null;
+                _refreshing = true;
+                try
                 {
-                    file.Write(bytes);
-                    file.Flush(flushToDisk: true);
+                    var count = OneDragonConfigFile.SaveCli(_path, _config.AutoBossCompletedRunCount - _savedCount,
+                        _savedNextTaskId, nextTaskId);
+                    _savedCount = count;
+                    _savedNextTaskId = _config.NextTaskId;
+                    _config.AutoBossCompletedRunCount = count;
                 }
-                // 替换已有文件，拒绝复活运行期间被用户删除/改名的配置。
-                File.Replace(temporary, _path, destinationBackupFileName: null);
+                finally { _refreshing = false; }
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or OverflowException)
             {
                 _failure = new AutomationException("configuration_save_failed",
                     $"无法保存一条龙配置 {Path.GetFileName(_path)}：{exception.Message}。请核对累计次数后再运行。");
                 throw _failure;
-            }
-            finally
-            {
-                if (File.Exists(temporary)) File.Delete(temporary);
             }
         }
     }
