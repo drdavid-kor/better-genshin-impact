@@ -37,14 +37,14 @@ public class CancellationContext : Singleton<CancellationContext>
     }
 
     /// <summary>在旧入口尚未取得 TaskSemaphore 的游戏启动阶段，阻止 CLI 接管取消源。</summary>
-    internal IDisposable ReservePreparation()
+    internal IDisposable? TryReservePreparation()
     {
         lock (_sync)
         {
             if (_automationScope is not null)
             {
                 if (!ReferenceEquals(_automationScope, AutomationExecutionScope.Current))
-                    throw new InvalidOperationException("CLI 作业正在执行，请先等待或停止该作业。");
+                    return null;
                 return new PreparationLease(null);
             }
             _preparingTasks++;

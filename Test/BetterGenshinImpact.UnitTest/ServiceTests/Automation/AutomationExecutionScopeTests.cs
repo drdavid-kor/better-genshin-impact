@@ -285,8 +285,9 @@ public class AutomationExecutionScopeTests
     public void GuiPreparationFirst_RejectsCliWithoutChangingGuiToken()
     {
         var context = new CancellationContext();
-        using (context.ReservePreparation())
+        using (var preparation = context.TryReservePreparation())
         {
+            Assert.NotNull(preparation);
             context.Set();
             var original = context.Cts;
             var exception = Assert.Throws<AutomationException>(() =>
@@ -305,10 +306,13 @@ public class AutomationExecutionScopeTests
     {
         var context = new CancellationContext();
         using var scope = new AutomationExecutionScope(context, CancellationToken.None, _ => { });
-        Assert.Throws<InvalidOperationException>(() => context.ReservePreparation());
+        Assert.Null(context.TryReservePreparation());
+        Assert.False(context.IsPreparing);
+        Assert.Same(scope.CancellationSource, context.Cts);
         using (scope.Bind())
-        using (context.ReservePreparation())
+        using (var preparation = context.TryReservePreparation())
         {
+            Assert.NotNull(preparation);
             Assert.False(context.IsPreparing);
             Assert.Same(scope.CancellationSource, context.Cts);
         }

@@ -581,7 +581,8 @@ public partial class OneDragonFlowViewModel : ViewModel
     [RelayCommand]
     public async Task OnOneKeyExecute()
     {
-        using var preparation = CancellationContext.Instance.ReservePreparation();
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
         _logger.LogInformation($"启用一条龙配置：{SelectedConfig.Name}");
 
         // 启动等待之前先进行取消操作的初始化，便于在任务开始前终止任务.

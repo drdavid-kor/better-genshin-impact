@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using BetterGenshinImpact.Core.Simulator;
 using BetterGenshinImpact.Helpers;
 using Wpf.Ui.Violeta.Controls;
@@ -149,7 +150,8 @@ public class TaskRunner
 
     public async Task RunSoloTaskAsync(ISoloTask soloTask)
     {
-        using var preparation = CancellationContext.Instance.ReservePreparation();
+        using var preparation = TryReservePreparation();
+        if (preparation is null) return;
         // 启动等待之前先进行取消操作的初始化，便于在任务开始前终止任务.
         CancellationContext.Instance.Set();
 
@@ -168,6 +170,20 @@ public class TaskRunner
             async () => await soloTask.Start(CancellationContext.Instance.Cts.Token),
             resetCancellationContext: false,
             clearCancellationContextOnLockFailure: true));
+    }
+
+    /// <summary>在 GUI 入口改变界面、读取文件或创建任务之前检查执行权；忙碌是正常状态。</summary>
+    internal static IDisposable? TryReservePreparation()
+    {
+        var preparation = CancellationContext.Instance.TryReservePreparation();
+        if (preparation is null && Application.Current?.Dispatcher is
+            { HasShutdownStarted: false, HasShutdownFinished: false } dispatcher)
+        {
+            void ShowBusy() => Toast.Warning("CLI 作业正在执行，请先等待或停止该作业。");
+            if (dispatcher.CheckAccess()) ShowBusy();
+            else dispatcher.BeginInvoke((Action)ShowBusy);
+        }
+        return preparation;
     }
 
     public void Init()
