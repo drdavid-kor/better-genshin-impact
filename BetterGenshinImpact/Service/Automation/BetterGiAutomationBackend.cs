@@ -12,6 +12,7 @@ using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Script.Group;
 using BetterGenshinImpact.Core.Script.Project;
 using BetterGenshinImpact.GameTask;
+using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.ViewModel.Pages;
@@ -136,6 +137,11 @@ internal sealed class BetterGiAutomationBackend : IAutomationBackend
             catch (OperationCanceledException) when (scope.IsCancellationRequested)
             {
                 // 只有委托真实退出后才报告取消；仍在停止中的任务继续占有任务锁。
+            }
+            catch (NormalEndException exception) when (!exception.IsFailure)
+            {
+                // 连续配置组会将正常结束向外传播，不能在最外层重新记成错误。
+                // 手动取消仍由 scope 的取消源决定终态。
             }
             catch (Exception exception)
             {

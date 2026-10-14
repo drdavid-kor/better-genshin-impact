@@ -1535,7 +1535,7 @@ public partial class AutoDomainTask : ISoloTask<Dictionary<string, int>>
             Sleep(300, _ct);
         }
 
-        throw new NormalEndException("未检测到秘境结束，可能是背包物品已满。");
+        throw new NormalEndException("未检测到秘境结束，可能是背包物品已满。", isFailure: true);
     }
 
     private async Task TryRecognizeRewardResult()

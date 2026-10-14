@@ -79,8 +79,16 @@ public class TaskRunner
         catch (NormalEndException e)
         {
             automationScope?.RecordException(e);
-            Notify.Event(NotificationEvent.TaskCancel).Success("任务手动取消，或正常结束");
-            _logger.LogInformation("任务中断:{Msg}", e.Message);
+            if (e.IsFailure)
+            {
+                Notify.Event(NotificationEvent.TaskError).Error("任务执行异常", e);
+                _logger.LogError("任务失败:{Msg}", e.Message);
+            }
+            else
+            {
+                Notify.Event(NotificationEvent.TaskCancel).Success("任务手动取消，或正常结束");
+                _logger.LogInformation("任务中断:{Msg}", e.Message);
+            }
             if (RunnerContext.Instance.IsContinuousRunGroup)
             {
                 // 连续执行时，抛出异常，终止执行
@@ -167,7 +175,7 @@ public class TaskRunner
         if (!TaskContext.Instance().IsInitialized)
         {
             UIDispatcherHelper.Invoke(() => { Toast.Warning("请先在启动页，启动截图器再使用本功能"); });
-            throw new NormalEndException("请先在启动页，启动截图器再使用本功能");
+            throw new NormalEndException("请先在启动页，启动截图器再使用本功能", isFailure: true);
         }
 
         // 清空实时任务触发器

@@ -59,14 +59,18 @@ public sealed class AutomationPipeServer(Func<NamedPipeServerStream> createServe
     private async Task ServeAsync(NamedPipeServerStream pipe, CancellationToken cancellationToken)
     {
         await using (pipe.ConfigureAwait(false))
-        using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
-            deadline.CancelAfter(TimeSpan.FromSeconds(15));
             try
             {
-                var request = await AutomationPipeProtocol.ReadAsync<AutomationRequest>(pipe, deadline.Token).ConfigureAwait(false);
-                var response = await engine.HandleAsync(request, deadline.Token).ConfigureAwait(false);
-                await AutomationPipeProtocol.WriteAsync(pipe, response, deadline.Token).ConfigureAwait(false);
+                AutomationRequest request;
+                // 15 秒只限制尚未交齐请求的连接；处理和写回受服务生命周期控制。
+                using (var readDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    readDeadline.CancelAfter(TimeSpan.FromSeconds(15));
+                    request = await AutomationPipeProtocol.ReadAsync<AutomationRequest>(pipe, readDeadline.Token).ConfigureAwait(false);
+                }
+                var response = await engine.HandleAsync(request, cancellationToken).ConfigureAwait(false);
+                await AutomationPipeProtocol.WriteAsync(pipe, response, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is IOException or InvalidDataException or OperationCanceledException or JsonException or ArgumentException)
             {

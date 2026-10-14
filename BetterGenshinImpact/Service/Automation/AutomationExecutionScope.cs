@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using BetterGenshinImpact.Automation;
 using BetterGenshinImpact.Core.Script;
+using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
 using Serilog.Core;
 using Serilog.Events;
 
@@ -83,6 +84,11 @@ internal sealed class AutomationExecutionScope : IDisposable
 
     internal void RecordException(Exception exception)
     {
+        // 战斗结束等控制流不是失败；已取消作业的终态仍由取消源决定。
+        if (exception is NormalEndException { IsFailure: false })
+        {
+            return;
+        }
         if (exception is OperationCanceledException && IsCancellationRequested)
         {
             return;

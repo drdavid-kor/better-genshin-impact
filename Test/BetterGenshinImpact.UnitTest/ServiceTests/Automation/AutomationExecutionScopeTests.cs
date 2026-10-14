@@ -1,6 +1,7 @@
 using BetterGenshinImpact.Automation;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
+using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
 using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service;
@@ -14,6 +15,59 @@ namespace BetterGenshinImpact.UnitTest.ServiceTests.Automation;
 
 public class AutomationExecutionScopeTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NormalEnd_DoesNotFailCompletedOrCancelledJob(bool cancelled)
+    {
+        var context = new CancellationContext();
+        using var scope = new AutomationExecutionScope(context, CancellationToken.None, _ => { });
+        using var binding = scope.Bind();
+        scope.RecordExecution();
+        if (cancelled) context.ManualCancel();
+
+        // TaskRunner 和连续配置组传播后的处理都走同一个记录入口。
+        await Task.Run(() => AutomationExecutionScope.Current!.RecordException(
+            new NormalEndException(cancelled ? "取消自动任务" : "战斗结束")));
+
+        Assert.Empty(scope.Failures);
+        Assert.Equal(cancelled, scope.IsCancellationRequested);
+        Assert.Equal(1, scope.ExecutedCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RealFailure_IsRecordedIncludingExplicitNormalEndFailure(bool normalEnd)
+    {
+        var context = new CancellationContext();
+        using var scope = new AutomationExecutionScope(context, CancellationToken.None, _ => { });
+        Exception error = normalEnd
+            ? new NormalEndException("任务前置条件不满足", isFailure: true)
+            : new InvalidOperationException("任务前置条件不满足");
+
+        scope.RecordException(error);
+
+        Assert.Equal("任务前置条件不满足", Assert.Single(scope.Failures));
+        Assert.False(scope.IsCancellationRequested);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OperationCancelled_IsIgnoredOnlyWhenJobWasCancelled(bool cancelled)
+    {
+        var context = new CancellationContext();
+        using var scope = new AutomationExecutionScope(context, CancellationToken.None, _ => { });
+        if (cancelled) context.Cancel();
+
+        scope.RecordException(new OperationCanceledException("取消异常"));
+
+        Assert.Equal(cancelled, scope.IsCancellationRequested);
+        if (cancelled) Assert.Empty(scope.Failures);
+        else Assert.Equal("取消异常", Assert.Single(scope.Failures));
+    }
+
     [Fact]
     public void DragonGroupReference_RequiresExactFilenameAndInternalName()
     {
