@@ -25,6 +25,7 @@ using BetterGenshinImpact.Service.Notification;
 using BetterGenshinImpact.Service.Notification.Model.Enum;
 using BetterGenshinImpact.ViewModel.Pages;
 using Microsoft.Extensions.Logging;
+using BetterGenshinImpact.Service.Automation;
 
 namespace BetterGenshinImpact.Service;
 
@@ -119,6 +120,8 @@ public partial class ScriptService : IScriptService
     
     public async Task RunMulti(IEnumerable<ScriptGroupProject> projectList, string? groupName = null,TaskProgress? taskProgress = null)
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
         groupName ??= "默认";
 
         // 启动等待之前先进行取消操作的初始化，便于在任务开始前终止任务.
@@ -277,11 +280,13 @@ public partial class ScriptService : IScriptService
 
                         if (exeProject is { SkipFlag: true })
                         {
+                            AutomationExecutionScope.Current?.RecordSkipped($"跳过标记任务：{exeProject.Name}");
                             continue;
                         }
 
                         if (ShouldSkipTask(exeProject))
                         {
+                            AutomationExecutionScope.Current?.RecordSkipped($"调度规则跳过任务：{exeProject.Name}");
                             continue;
                         }
 
@@ -289,6 +294,7 @@ public partial class ScriptService : IScriptService
                         await _blessingOfTheWelkinMoonTask.Start(CancellationContext.Instance.Cts.Token);
                         if (exeProject.Status != "Enabled")
                         {
+                            AutomationExecutionScope.Current?.RecordSkipped($"任务已禁用：{exeProject.Name}");
                             _logger.LogInformation("脚本 {Name} 状态为禁用，跳过执行", exeProject.Name);
                             continue;
                         }
@@ -362,6 +368,7 @@ public partial class ScriptService : IScriptService
                             }
                             catch (Exception e)
                             {
+                                AutomationExecutionScope.Current?.RecordException(e);
                                 _logger.LogDebug(e, "执行脚本时发生异常");
                                 _logger.LogError("执行脚本时发生异常: {Msg}", e.Message);
                                 if (!RunnerContext.Instance.IsPreExecution && taskProgress != null && taskProgress.CurrentScriptGroupProjectInfo != null)
@@ -515,6 +522,7 @@ public partial class ScriptService : IScriptService
 
     private async Task ExecuteProject(ScriptGroupProject project)
     {
+        AutomationExecutionScope.Current?.RecordExecution();
         TaskContext.Instance().CurrentScriptProject = project;
         if (project.Type == "Javascript")
         {
@@ -604,6 +612,12 @@ public partial class ScriptService : IScriptService
 
     public static async Task StartGameTask(bool waitForMainUi = true)
     {
+        if (AutomationExecutionScope.Current is { } automationScope)
+        {
+            automationScope.CancellationSource.Token.ThrowIfCancellationRequested();
+            BetterGiAutomationBackend.EnsureExecutionReady();
+            return;
+        }
         // 没启动时候，启动截图器
         var homePageViewModel = App.GetService<HomePageViewModel>();
         if (!homePageViewModel!.TaskDispatcherEnabled)

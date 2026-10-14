@@ -349,6 +349,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSOneDragonFlow()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (OneDragonFlowViewModel == null || OneDragonFlowViewModel.SelectedConfig == null)
         {
             OneDragonFlowViewModel.OnNavigatedTo();
@@ -401,6 +404,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     public async Task OnSwitchAutoGeniusInvokation()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (GetTcgStrategy(out var content))
         {
             return;
@@ -442,6 +448,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     public async Task OnSwitchAutoWood()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         SwitchAutoWoodEnabled = true;
         await new TaskRunner()
             .RunSoloTaskAsync(new AutoWoodTask(new WoodTaskParam(AutoWoodRoundNum, AutoWoodDailyMaxCount)));
@@ -457,6 +466,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     public async Task OnSwitchAutoFight()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (GetFightStrategy(out var path))
         {
             return;
@@ -486,15 +498,24 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     public async Task OnSwitchAutoDomain()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (GetFightStrategy(out var path))
         {
             return;
         }
 
         SwitchAutoDomainEnabled = true;
-        await new TaskRunner()
-            .RunSoloTaskAsync(new AutoDomainTask(new AutoDomainParam(AutoDomainRoundNum, path)));
-        SwitchAutoDomainEnabled = false;
+        try
+        {
+            await new TaskRunner()
+                .RunSoloTaskAsync(new AutoDomainTask(new AutoDomainParam(AutoDomainRoundNum, path)));
+        }
+        finally
+        {
+            SwitchAutoDomainEnabled = false;
+        }
     }
 
     public bool GetFightStrategy(out string path)
@@ -538,6 +559,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoBoss()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (GetFightStrategy(Config.AutoBossConfig.StrategyName, out var path))
         {
             return;
@@ -560,6 +584,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoStygianOnslaught()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (GetFightStrategy(Config.AutoStygianOnslaughtConfig.StrategyName, out var path))
         {
             return;
@@ -665,6 +692,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoMusicGame()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         SwitchAutoMusicGameEnabled = true;
         await new TaskRunner()
             .RunSoloTaskAsync(new AutoMusicGameTask(new AutoMusicGameParam()));
@@ -680,6 +710,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoAlbum()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         SwitchAutoAlbumEnabled = true;
         await new TaskRunner()
             .RunSoloTaskAsync(new AutoAlbumTask(new AutoMusicGameParam()));
@@ -689,6 +722,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoCook()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         SwitchAutoCookEnabled = true;
         await new TaskRunner()
             .RunSoloTaskAsync(new AutoCookTask());
@@ -698,6 +734,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoCombo()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         SwitchAutoComboEnabled = true;
         await new TaskRunner()
             .RunSoloTaskAsync(new AutoComboBuildTask());
@@ -707,6 +746,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoComboRun()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (_autoComboRunRunning)
         {
             // 暂停：取消 Tick 循环，行为树节点状态保留，下次点击继续
@@ -747,6 +789,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoFishing()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         SwitchAutoFishingEnabled = true;
         var param = AutoFishingTaskParam.BuildFromConfig(TaskContext.Instance().Config.AutoFishingConfig, SaveScreenshotOnKeyTick);
         await new TaskRunner()
@@ -757,6 +802,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoLeyLineOutcrop()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         SwitchAutoLeyLineOutcropEnabled = true;
         AutoLeyLineOutcropParam autoLeyLineOutcropParam = new AutoLeyLineOutcropParam();
         autoLeyLineOutcropParam.SetAutoLeyLineOutcropConfig(Config.AutoLeyLineOutcropConfig);
@@ -786,6 +834,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchArtifactSalvage()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         SwitchArtifactSalvageEnabled = true;
         await new TaskRunner()
             .RunSoloTaskAsync(new AutoArtifactSalvageTask(new AutoArtifactSalvageTaskParam(
@@ -860,6 +911,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchGetGridIcons()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         try
         {
             SwitchGetGridIconsEnabled = true;
@@ -892,6 +946,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchGridIconsModelAccuracyTest()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         try
         {
             SwitchGetGridIconsEnabled = true;
@@ -907,6 +964,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnRunInventoryCountComparison()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         try
         {
             SwitchGetGridIconsEnabled = true;
@@ -934,6 +994,9 @@ public partial class TaskSettingsPageViewModel : ViewModel
     [RelayCommand]
     private async Task OnSwitchAutoRedeemCode()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         var multilineTextBox = new TextBox
         {
             TextWrapping = TextWrapping.Wrap,

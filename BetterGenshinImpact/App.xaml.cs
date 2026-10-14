@@ -15,6 +15,7 @@ using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Extensions;
 using BetterGenshinImpact.Helpers.Win32;
 using BetterGenshinImpact.Service;
+using BetterGenshinImpact.Service.Automation;
 using BetterGenshinImpact.Service.ChildSession;
 using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.Service.I18n;
@@ -77,6 +78,7 @@ public partial class App : Application
                 services.AddSingleton<IRichTextBox>(richTextBox);
 
                 var loggerConfiguration = new LoggerConfiguration()
+                    .WriteTo.Sink(new AutomationLogSink())
                     .WriteTo.Logger(fileLoggerConfiguration => fileLoggerConfiguration
                         .Enrich.WithProperty("BgiInstance", instanceIdentity)
                         .WriteTo.File(logFile,
@@ -129,6 +131,9 @@ public partial class App : Application
                 services.AddHostedService(sp => sp.GetRequiredService<InstanceService>());
                 // App Host
                 services.AddHostedService<ApplicationHostService>();
+                services.AddSingleton<AutomationHostedService>();
+                services.AddSingleton<IAutomationBridgeService>(sp => sp.GetRequiredService<AutomationHostedService>());
+                services.AddHostedService(sp => sp.GetRequiredService<AutomationHostedService>());
                 // Page resolver service
                 services.AddSingleton<INavigationService, NavigationService>();
                 services.AddSingleton<IUpdateService, UpdateService>();
@@ -146,6 +151,7 @@ public partial class App : Application
 
                 // Views
                 services.AddView<HomePage, HomePageViewModel>();
+                services.AddView<AutomationPage, AutomationPageViewModel>();
                 services.AddView<ScriptControlPage, ScriptControlViewModel>();
                 services.AddView<TriggerSettingsPage, TriggerSettingsPageViewModel>();
                 services.AddView<MacroSettingsPage, MacroSettingsPageViewModel>();

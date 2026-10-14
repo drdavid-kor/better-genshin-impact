@@ -30,6 +30,7 @@ bld/
 
 # Mine
 /Tmp/
+/artifacts/
 
 # AI temporary design docs
 Docs/tmp/*

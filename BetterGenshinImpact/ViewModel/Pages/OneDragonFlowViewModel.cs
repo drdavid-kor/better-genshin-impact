@@ -28,6 +28,7 @@ using BetterGenshinImpact.Core.Script.Project;
 using BetterGenshinImpact.Service.Interface;
 using System.Collections.Specialized;
 using Wpf.Ui.Violeta.Controls;
+using BetterGenshinImpact.Service.Automation;
 
 namespace BetterGenshinImpact.ViewModel.Pages;
 
@@ -38,6 +39,7 @@ public partial class OneDragonFlowViewModel : ViewModel
     public static readonly string OneDragonFlowConfigFolder = Global.Absolute(@"User\OneDragon");
 
     private readonly ScriptService _scriptService;
+    private AutomationDragonConfigStore? _automationConfigStore;
 
     [ObservableProperty] private ObservableCollection<OneDragonTaskItem> _taskList =
     [
@@ -303,6 +305,7 @@ public partial class OneDragonFlowViewModel : ViewModel
             var config = JsonConvert.DeserializeObject<OneDragonFlowConfig>(json);
             if (config != null)
             {
+                OneDragonConfigFile.TrackGui(config, configFile);
                 configs.Add(config);
                 if (config.Name == TaskContext.Instance().Config.SelectedOneDragonFlowConfigName)
                 {
@@ -491,6 +494,7 @@ public partial class OneDragonFlowViewModel : ViewModel
         {
             return;
         }
+        if (OneDragonConfigFile.IsRefreshing(config)) return;
 
         // 首领讨伐的累计次数回调来自任务线程，保存配置需要访问 WPF 任务列表，统一调度回 UI 线程。
         if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
@@ -515,12 +519,18 @@ public partial class OneDragonFlowViewModel : ViewModel
             return;
         }
 
+        if (_automationConfigStore is { } store)
+        {
+            // CLI 使用发现阶段实际读取的文件，且不得吞掉保存失败。
+            store.Save();
+            return;
+        }
+
         try
         {
             Directory.CreateDirectory(OneDragonFlowConfigFolder);
-            var json = JsonConvert.SerializeObject(config, Formatting.Indented);
             var filePath = Path.Combine(OneDragonFlowConfigFolder, $"{config.Name}.json");
-            File.WriteAllText(filePath, json);
+            OneDragonConfigFile.SaveGui(config, filePath);
         }
         catch (Exception e)
         {
@@ -572,6 +582,8 @@ public partial class OneDragonFlowViewModel : ViewModel
     [RelayCommand]
     public async Task OnOneKeyExecute()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
         _logger.LogInformation($"启用一条龙配置：{SelectedConfig.Name}");
 
         // 启动等待之前先进行取消操作的初始化，便于在任务开始前终止任务.
@@ -652,6 +664,8 @@ public partial class OneDragonFlowViewModel : ViewModel
                         await task.Action();
                         await Task.Delay(1000);
                     });
+                    // TaskRunner 会记录并吞掉任务异常；保存失败必须阻止下一项任务。
+                    _automationConfigStore?.ThrowIfFailed();
                 }
                 else
                 {
@@ -671,6 +685,10 @@ public partial class OneDragonFlowViewModel : ViewModel
                             await Task.Delay(500);
                             string filePath = Path.Combine(_basePath, _scriptGroupPath, $"{task.Name}.json");
                             var group = ScriptGroup.FromJson(await File.ReadAllTextAsync(filePath));
+                            if (AutomationExecutionScope.Current is not null && group.Name != task.Name)
+                            {
+                                throw new InvalidOperationException($"配置组文件名称发生变化：预期 {task.Name}，实际 {group.Name}。");
+                            }
                             IScriptService? scriptService = App.GetService<IScriptService>();
                             await scriptService!.RunMulti(ScriptControlViewModel.GetNextProjects(group), group.Name);
                             await Task.Delay(1000);
@@ -678,6 +696,7 @@ public partial class OneDragonFlowViewModel : ViewModel
                     }
                     catch (Exception e)
                     {
+                        AutomationExecutionScope.Current?.RecordException(e);
                         _logger.LogDebug(e, "执行配置组任务时失败");
                         Toast.Error("执行配置组任务时失败");
                     }
@@ -695,6 +714,12 @@ public partial class OneDragonFlowViewModel : ViewModel
             }
         }
 
+        if (AutomationExecutionScope.Current is { ExecutedCount: 0 })
+        {
+            // 全部配置任务均跳过时，不额外执行奖励检查来冒充实际执行。
+            return;
+        }
+
         // 检查和最终结束的任务
         await new TaskRunner().RunThreadAsync(async () =>
         {
@@ -707,7 +732,7 @@ public partial class OneDragonFlowViewModel : ViewModel
             _logger.LogInformation("一条龙和配置组任务结束");
 
             // 执行完成后操作
-            if (SelectedConfig != null && !string.IsNullOrEmpty(SelectedConfig.CompletionAction))
+            if (AutomationExecutionScope.Current is null && SelectedConfig != null && !string.IsNullOrEmpty(SelectedConfig.CompletionAction))
             {
                 switch (SelectedConfig.CompletionAction)
                 {
@@ -728,6 +753,32 @@ public partial class OneDragonFlowViewModel : ViewModel
                 }
             }
         });
+    }
+
+    /// <summary>CLI 使用独立 ViewModel 和精确读取的配置，不更改窗口当前选择。</summary>
+    internal async Task RunAutomationAsync(OneDragonFlowConfig config, string configPath)
+    {
+        BetterGiAutomationBackend.ValidateDragon(config);
+        using var store = new AutomationDragonConfigStore(config, configPath);
+        _automationConfigStore = store;
+        try
+        {
+            SelectedConfig = config;
+            LoadDisplayTaskListFromConfig();
+            if (TaskList.All(task => !task.IsEnabled))
+            {
+                throw new InvalidOperationException("一条龙配置没有可执行的任务定义。");
+            }
+            BetterGiAutomationBackend.ValidateDragonGroupReferences(
+                TaskList.Where(task => task.IsEnabled && !ScriptGroupsdefault.Any(group => group.Name == task.Name))
+                    .Select(task => task.Name), _scriptGroupPath);
+            await OnOneKeyExecute();
+            store.ThrowIfFailed();
+        }
+        finally
+        {
+            _automationConfigStore = null;
+        }
     }
 
     /// <summary>
@@ -882,6 +933,9 @@ public partial class OneDragonFlowViewModel : ViewModel
     [RelayCommand]
     private async Task DeleteConfig()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (SelectedConfig == null)
         {
             Toast.Warning("请先选择要删除的配置");
@@ -953,6 +1007,9 @@ public partial class OneDragonFlowViewModel : ViewModel
     [RelayCommand]
     private void RenameConfig()
     {
+        using var preparation = TaskRunner.TryReservePreparation();
+        if (preparation is null) return;
+
         if (SelectedConfig == null)
         {
             Toast.Warning("请先选择要重命名的配置");

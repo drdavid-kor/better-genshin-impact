@@ -14,6 +14,7 @@ using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.ViewModel.Pages;
 using Microsoft.Extensions.Logging;
+using BetterGenshinImpact.Service.Automation;
 
 namespace BetterGenshinImpact.Model;
 
@@ -71,12 +72,14 @@ public partial class OneDragonTaskItem : ObservableObject
             case "领取邮件":
                 Action = async () =>
                 {
+                    AutomationExecutionScope.Current?.RecordExecution();
                     await new ClaimMailRewardsTask().Start(CancellationContext.Instance.Cts.Token);
                 };
                 break;
             case "合成树脂":
                 Action = async () =>
                 {
+                    AutomationExecutionScope.Current?.RecordExecution();
                     try
                     {
                         await new GoToCraftingBenchTask().GoCraftResin(config.CraftingBenchCountry,
@@ -100,6 +103,7 @@ public partial class OneDragonTaskItem : ObservableObject
                     if (taskSettingsPageViewModel!.GetFightStrategy(out var path))
                     {
                         TaskControl.Logger.LogError("自动秘境战斗策略{Msg}，跳过", "未配置");
+                        AutomationExecutionScope.Current?.RecordSkipped("自动秘境未配置战斗策略。");
                         return;
                     }
 
@@ -107,6 +111,7 @@ public partial class OneDragonTaskItem : ObservableObject
                     if (string.IsNullOrEmpty(domainName))
                     {
                         TaskControl.Logger.LogError("一条龙配置内{Msg}需要刷的秘境，跳过", "未选择");
+                        AutomationExecutionScope.Current?.RecordSkipped("一条龙未选择秘境。");
                         return;
                     }
                     else
@@ -120,12 +125,14 @@ public partial class OneDragonTaskItem : ObservableObject
                         DomainName = domainName,
                         SundaySelectedValue = sundaySelectedValue
                     };
+                    AutomationExecutionScope.Current?.RecordExecution();
                     await new AutoDomainTask(autoDomainParam).Start(CancellationContext.Instance.Cts.Token);
                 };
                 break;
             case "自动首领讨伐":
                 Action = async () =>
                 {
+                    if (RecordAutomationScheduledSkip(Name, config, true)) return;
                     var totalRunCountLimited = config.AutoBossSpecifyRunCount && config.AutoBossTotalRunCountLimit > 0;
                     var remainingTotalRunCount = config.AutoBossTotalRunCountLimit - config.AutoBossCompletedRunCount;
                     if (totalRunCountLimited && remainingTotalRunCount <= 0)
@@ -145,12 +152,14 @@ public partial class OneDragonTaskItem : ObservableObject
                     if (taskSettingsPageViewModel!.GetFightStrategy(config.AutoBossStrategyName, out var path))
                     {
                         TaskControl.Logger.LogError("自动首领讨伐战斗策略{Msg}，跳过", "未配置");
+                        AutomationExecutionScope.Current?.RecordSkipped("自动首领讨伐未配置战斗策略。");
                         return;
                     }
 
                     if (string.IsNullOrWhiteSpace(config.AutoBossName))
                     {
                         TaskControl.Logger.LogError("一条龙配置内{Msg}需要讨伐的首领，跳过", "未选择");
+                        AutomationExecutionScope.Current?.RecordSkipped("一条龙未选择首领。");
                         return;
                     }
 
@@ -175,6 +184,7 @@ public partial class OneDragonTaskItem : ObservableObject
                     {
                         param.RewardClaimedCallback = () => config.AutoBossCompletedRunCount++;
                     }
+                    AutomationExecutionScope.Current?.RecordExecution();
                     await new AutoBossTask(param).Start(CancellationContext.Instance.Cts.Token);
                 };
                 break;
@@ -190,17 +200,20 @@ public partial class OneDragonTaskItem : ObservableObject
                     if (taskSettingsPageViewModel!.GetFightStrategy(TaskContext.Instance().Config.AutoStygianOnslaughtConfig.StrategyName, out var path))
                     {
                         TaskControl.Logger.LogError("自动幽境危战战斗策略{Msg}，跳过", "未配置");
+                        AutomationExecutionScope.Current?.RecordSkipped("自动幽境危战未配置战斗策略。");
                         return;
                     }
 
                     AutoStygianOnslaughtParam param = new AutoStygianOnslaughtParam();
                     param.SetAutoStygianOnslaughtConfig(TaskContext.Instance().Config.AutoStygianOnslaughtConfig);
+                    AutomationExecutionScope.Current?.RecordExecution();
                     await new AutoStygianOnslaughtTask(param, path).Start(CancellationContext.Instance.Cts.Token);
                 };
                 break;
             case "领取每日奖励":
                 Action = async () =>
                 {
+                    AutomationExecutionScope.Current?.RecordExecution();
                     await new GoToAdventurersGuildTask().Start(config.AdventurersGuildCountry,
                         CancellationContext.Instance.Cts.Token, config.DailyRewardPartyName);
                     await new ClaimBattlePassRewardsTask().Start(CancellationContext.Instance.Cts.Token);
@@ -209,13 +222,16 @@ public partial class OneDragonTaskItem : ObservableObject
             case "领取尘歌壶奖励":
                 Action = async () =>
                 {
+                    AutomationExecutionScope.Current?.RecordExecution();
                     await new GoToSereniteaPotTask().Start(CancellationContext.Instance.Cts.Token);
                 };
                 break;
             case "自动地脉花":
                 Action = async () =>
                 {
-                    if (!config.ShouldRunLeyLineToday())
+                    var shouldRunToday = config.ShouldRunLeyLineToday();
+                    if (RecordAutomationScheduledSkip(Name, config, shouldRunToday)) return;
+                    if (!shouldRunToday)
                     {
                         TaskControl.Logger.LogInformation("自动地脉花未在运行日期内，跳过");
                         return;
@@ -242,6 +258,7 @@ public partial class OneDragonTaskItem : ObservableObject
 
                         AutoLeyLineOutcropParam param = new AutoLeyLineOutcropParam();
                         param.SetAutoLeyLineOutcropConfig(taskConfig);
+                        AutomationExecutionScope.Current?.RecordExecution();
                         await new AutoLeyLineOutcropTask(param, config.LeyLineOneDragonMode)
                             .Start(CancellationContext.Instance.Cts.Token);
                     }
@@ -259,5 +276,21 @@ public partial class OneDragonTaskItem : ObservableObject
                 Action = () => Task.CompletedTask;
                 break;
         }
+    }
+
+    internal static bool RecordAutomationScheduledSkip(string taskName, OneDragonFlowConfig config, bool shouldRunLeyLineToday)
+    {
+        var scope = AutomationExecutionScope.Current;
+        if (scope is null) return false;
+        var reason = taskName switch
+        {
+            "自动首领讨伐" when config.AutoBossSpecifyRunCount && config.AutoBossTotalRunCountLimit > 0
+                && config.AutoBossCompletedRunCount >= config.AutoBossTotalRunCountLimit => "自动首领讨伐累计成功次数已达到上限，跳过。",
+            "自动地脉花" when !shouldRunLeyLineToday => "自动地脉花未在运行日期内，跳过。",
+            _ => null
+        };
+        if (reason is null) return false;
+        scope.RecordSkipped(reason);
+        return true;
     }
 }

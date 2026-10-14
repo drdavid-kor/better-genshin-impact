@@ -174,7 +174,7 @@ public partial class AutoWoodTask : ISoloTask
                 if (_woodMetricsDict.Count == 0)
                 {
                     TaskContext.Instance().Config.AutoWoodConfig.WoodCountOcrEnabled = false;
-                    throw new NormalEndException("首次伐木就未识别到木材数据，已经自动关闭【OCR识别并累计木材数】的功能，请重新启动【自动伐木】功能！");
+                    throw new NormalEndException("首次伐木就未识别到木材数据，已经自动关闭【OCR识别并累计木材数】的功能，请重新启动【自动伐木】功能！", isFailure: true);
                 }
 
                 return;
@@ -442,7 +442,7 @@ public partial class AutoWoodTask : ISoloTask
             if (ra.IsEmpty())
             {
 #if !TEST_WITHOUT_Z_ITEM
-                throw new NormalEndException("请先装备小道具「王树瑞佑」！如果已经装备仍旧出现此提示，请重新仔细阅读文档中的《快速上手》！");
+                throw new NormalEndException("请先装备小道具「王树瑞佑」！如果已经装备仍旧出现此提示，请重新仔细阅读文档中的《快速上手》！", isFailure: true);
 #else
                 System.Threading.Thread.Sleep(2000);
                 Simulation.SendInput.SimulateAction(GIActions.QuickUseGadget);

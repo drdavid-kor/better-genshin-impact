@@ -1,0 +1,91 @@
+<Page x:Class="BetterGenshinImpact.View.Pages.AutomationPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:b="http://schemas.microsoft.com/xaml/behaviors"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:i18n="clr-namespace:BetterGenshinImpact.Service.I18n"
+      xmlns:pages="clr-namespace:BetterGenshinImpact.ViewModel.Pages"
+      Title="AutomationPage"
+      d:DataContext="{d:DesignInstance Type=pages:AutomationPageViewModel}"
+      d:DesignWidth="850" d:DesignHeight="900"
+      FontFamily="{StaticResource TextThemeFontFamily}"
+      Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+      mc:Ignorable="d">
+    <b:Interaction.Triggers>
+        <b:EventTrigger EventName="Loaded">
+            <b:InvokeCommandAction Command="{Binding LoadedCommand}" />
+        </b:EventTrigger>
+        <b:EventTrigger EventName="Unloaded">
+            <b:InvokeCommandAction Command="{Binding UnloadedCommand}" />
+        </b:EventTrigger>
+    </b:Interaction.Triggers>
+
+    <StackPanel Margin="{StaticResource PagePadding}">
+        <ui:TextBlock FontTypography="Title" Text="AI / CLI" />
+        <TextBlock Margin="0,6,0,20" TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                   Text="{i18n:T 启动连接，复制提示词，让支持本机命令的 AI 助手调用你的 BetterGI 任务。}" />
+
+        <ui:CardControl Margin="0,0,0,16">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="{Binding ServiceStatus}" AutomationProperties.LiveSetting="Polite" />
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding ReadinessText}"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <WrapPanel Margin="0,16,0,8">
+                        <ui:Button Margin="0,0,12,8" Appearance="Primary" Content="{i18n:T 启动 CLI 服务}"
+                                   Icon="{ui:SymbolIcon Play24}" Command="{Binding StartCliCommand}" />
+                        <ui:Button Margin="0,0,12,8" Content="{i18n:T 打开 CLI 终端}"
+                                   Icon="{ui:SymbolIcon WindowConsole20}" Command="{Binding OpenTerminalCommand}" />
+                        <ui:Button Margin="0,0,0,8" Content="{i18n:T 刷新状态}"
+                                   Icon="{ui:SymbolIcon ArrowClockwise24}" Command="{Binding RefreshCommand}" />
+                    </WrapPanel>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               Text="{i18n:T 无需重启，本次运行期间有效。执行游戏任务前，请在启动页启用截图器。}" />
+                </StackPanel>
+            </ui:CardControl.Header>
+        </ui:CardControl>
+
+        <ui:CardControl Margin="0,0,0,16">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="{i18n:T 复制给 AI 助手}" />
+                    <TextBlock Margin="0,8,0,12" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="{i18n:T 提示词已填入当前程序路径和会话。可以补充任务目标；留空时，AI 只会先查看可用任务。}" />
+                    <TextBlock Margin="0,0,0,6" Text="{i18n:T 希望 AI 完成的任务（可选）}" />
+                    <ui:TextBox Text="{Binding TaskGoal, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="{i18n:T 例如：帮我运行已配置的每日采集任务，并报告结果}"
+                                AcceptsReturn="True" TextWrapping="Wrap" MinHeight="72" MaxHeight="160"
+                                VerticalScrollBarVisibility="Auto" MaxLength="2000"
+                                AutomationProperties.Name="{i18n:T 希望 AI 完成的任务}" />
+                    <ui:Button Margin="0,12,0,12" HorizontalAlignment="Left" Appearance="Primary"
+                               Content="{i18n:T 复制 AI 提示词}" Icon="{ui:SymbolIcon Copy24}"
+                               Command="{Binding CopyPromptCommand}" />
+                    <TextBox Text="{Binding PromptText, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                             Height="240" Padding="12" VerticalScrollBarVisibility="Auto"
+                             Background="{DynamicResource ControlFillColorDefaultBrush}"
+                             Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                             BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                             AutomationProperties.Name="{i18n:T AI 调用提示词预览}" />
+                    <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                               Text="{i18n:T 复制不会执行任务。提示词包含断线查询、等待与取消规则，无需另行安装 Skill。}" />
+                </StackPanel>
+            </ui:CardControl.Header>
+        </ui:CardControl>
+
+        <TextBlock Margin="0,0,0,16" Text="{Binding Feedback}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+
+        <Expander Header="{i18n:T 当前连接信息}">
+            <StackPanel Margin="0,12,0,0">
+                <TextBlock Text="{i18n:T CLI 路径}" />
+                <TextBox Margin="0,4,0,12" Text="{Binding CliPath, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" />
+                <TextBlock Text="{i18n:T BetterGI 安装目录}" />
+                <TextBox Margin="0,4,0,12" Text="{Binding InstallationPath, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding SessionId, StringFormat='Windows Session: {0}'}" />
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+</Page>
