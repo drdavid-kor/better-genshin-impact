@@ -39,6 +39,7 @@ public partial class OneDragonFlowViewModel : ViewModel
     public static readonly string OneDragonFlowConfigFolder = Global.Absolute(@"User\OneDragon");
 
     private readonly ScriptService _scriptService;
+    private AutomationDragonConfigStore? _automationConfigStore;
 
     [ObservableProperty] private ObservableCollection<OneDragonTaskItem> _taskList =
     [
@@ -516,6 +517,13 @@ public partial class OneDragonFlowViewModel : ViewModel
             return;
         }
 
+        if (_automationConfigStore is { } store)
+        {
+            // CLI 使用发现阶段实际读取的文件，且不得吞掉保存失败。
+            store.Save();
+            return;
+        }
+
         try
         {
             Directory.CreateDirectory(OneDragonFlowConfigFolder);
@@ -654,6 +662,8 @@ public partial class OneDragonFlowViewModel : ViewModel
                         await task.Action();
                         await Task.Delay(1000);
                     });
+                    // TaskRunner 会记录并吞掉任务异常；保存失败必须阻止下一项任务。
+                    _automationConfigStore?.ThrowIfFailed();
                 }
                 else
                 {
@@ -744,19 +754,29 @@ public partial class OneDragonFlowViewModel : ViewModel
     }
 
     /// <summary>CLI 使用独立 ViewModel 和精确读取的配置，不更改窗口当前选择。</summary>
-    internal async Task RunAutomationAsync(OneDragonFlowConfig config)
+    internal async Task RunAutomationAsync(OneDragonFlowConfig config, string configPath)
     {
         BetterGiAutomationBackend.ValidateDragon(config);
-        SelectedConfig = config;
-        LoadDisplayTaskListFromConfig();
-        if (TaskList.All(task => !task.IsEnabled))
+        using var store = new AutomationDragonConfigStore(config, configPath);
+        _automationConfigStore = store;
+        try
         {
-            throw new InvalidOperationException("一条龙配置没有可执行的任务定义。");
+            SelectedConfig = config;
+            LoadDisplayTaskListFromConfig();
+            if (TaskList.All(task => !task.IsEnabled))
+            {
+                throw new InvalidOperationException("一条龙配置没有可执行的任务定义。");
+            }
+            BetterGiAutomationBackend.ValidateDragonGroupReferences(
+                TaskList.Where(task => task.IsEnabled && !ScriptGroupsdefault.Any(group => group.Name == task.Name))
+                    .Select(task => task.Name), _scriptGroupPath);
+            await OnOneKeyExecute();
+            store.ThrowIfFailed();
         }
-        BetterGiAutomationBackend.ValidateDragonGroupReferences(
-            TaskList.Where(task => task.IsEnabled && !ScriptGroupsdefault.Any(group => group.Name == task.Name))
-                .Select(task => task.Name), _scriptGroupPath);
-        await OnOneKeyExecute();
+        finally
+        {
+            _automationConfigStore = null;
+        }
     }
 
     /// <summary>

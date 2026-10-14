@@ -127,7 +127,7 @@ internal sealed class BetterGiAutomationBackend : IAutomationBackend
                         case "one-dragon":
                             var config = ReadDragon(entry.Path);
                             ValidateDragon(config);
-                            await new OneDragonFlowViewModel().RunAutomationAsync(config);
+                            await new OneDragonFlowViewModel().RunAutomationAsync(config, entry.Path);
                             break;
                         default:
                             throw new AutomationException("invalid_kind", "不支持的任务类型。");
